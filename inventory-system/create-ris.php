@@ -6,76 +6,93 @@ $product_query = "SELECT * FROM products";
 $product_result = mysqli_query($conn, $product_query);
 
 if(isset($_POST['submit'])){
+    
+    mysqli_begin_transaction($conn);
+    try{
+        $office = $_POST['office'];
+        $purpose = $_POST['purpose'];
+        $request_date = date('Y-m-d');
 
-    $office = $_POST['office'];
-    $purpose = $_POST['purpose'];
-    $request_date = date('Y-m-d');
+        // GENERATE RIS NUMBER
+        $ris_number = "RIS-" . date('YmdHis');
 
-    // GENERATE RIS NUMBER
-    $ris_number = "RIS-" . date('YmdHis');
+        // 1. INSERT RIS HEADER FIRST
+        $insert_ris = "INSERT INTO ris_requests (office, purpose, request_date, ris_number)
+        VALUES ('$office', '$purpose', '$request_date', '$ris_number')";
 
-    // 1. INSERT RIS HEADER FIRST
-    $insert_ris = "INSERT INTO ris_requests (office, purpose, request_date, ris_number)
-                   VALUES ('$office', '$purpose', '$request_date', '$ris_number')";
+        if(!mysqli_query($conn, $insert_ris)){
+            throw new Exception("Failed to insert RIS header");}
+        $ris_id = mysqli_insert_id($conn);
 
-    mysqli_query($conn, $insert_ris);
+        // 2. LOOP ITEMS
+        foreach($_POST['product_id'] as $index => $product_id){
 
-    $ris_id = mysqli_insert_id($conn);
+            $other_item = $_POST['other_item'][$index];
+            $quantity_requested = $_POST['quantity_requested'][$index];
 
-    // 2. LOOP ITEMS
-    foreach($_POST['product_id'] as $index => $product_id){
+            $quantity_issued = 0;
+            $stock_available = "NO";
 
-        $other_item = $_POST['other_item'][$index];
-        $quantity_requested = $_POST['quantity_requested'][$index];
-
-        $quantity_issued = 0;
-        $stock_available = "NO";
-
-        // handle "others"
-        if($product_id == "others"){
+            // handle "others"
+            if($product_id == "others"){
             $product_id = NULL;
-        }
+            }
 
-        // CHECK INVENTORY ONLY IF PRODUCT EXISTS
-        if(!empty($product_id)){
+            // CHECK INVENTORY ONLY IF PRODUCT EXISTS
+            if(!empty($product_id)){
 
-            $product_sql = "SELECT current_balance FROM products WHERE id='$product_id'";
-            $product_result2 = mysqli_query($conn, $product_sql);
-            $product = mysqli_fetch_assoc($product_result2);
+                $product_sql = "SELECT current_balance FROM products WHERE id='$product_id'";
+                $product_result2 = mysqli_query($conn, $product_sql);
+                $product = mysqli_fetch_assoc($product_result2);
 
-            if($product){
+                if(!$product_result){
+                    throw new Exception("Product query failed");}
+                $product = mysqli_fetch_assoc($product_result);
 
-                $current_balance = $product['current_balance'];
+                if($product){
 
-                if($current_balance >= $quantity_requested){
-                    $stock_available = "YES";
-                    $quantity_issued = $quantity_requested;
+                    $current_balance = $product['current_balance'];
+
+                    if($current_balance >= $quantity_requested){
+                        $stock_available = "YES";
+                        $quantity_issued = $quantity_requested;
+                    }
                 }
             }
+
+            // 3. INSERT RIS ITEMS
+            $insert_item = "INSERT INTO ris_items (
+                ris_id,
+                product_id,
+                other_item,
+                quantity_requested,
+                quantity_issued,
+                stock_available
+                )
+                VALUES (
+                '$ris_id',
+                " . ($product_id ? "'$product_id'" : "NULL") . ",
+                '$other_item',
+                '$quantity_requested',
+                '$quantity_issued',
+                '$stock_available'
+                )";
+
+            if(!mysqli_query($conn, $insert_item)){
+                throw new Exception("Failed to insert RIS item");
+            }
         }
+        mysqli_commit($conn);
 
-        // 3. INSERT RIS ITEMS
-        $insert_item = "INSERT INTO ris_items (
-                            ris_id,
-                            product_id,
-                            other_item,
-                            quantity_requested,
-                            quantity_issued,
-                            stock_available
-                        )
-                        VALUES (
-                            '$ris_id',
-                            " . ($product_id ? "'$product_id'" : "NULL") . ",
-                            '$other_item',
-                            '$quantity_requested',
-                            '$quantity_issued',
-                            '$stock_available'
-                        )";
+        //echo "RIS Created Successfully!";
 
-        mysqli_query($conn, $insert_item);
+    }catch (Exception $e) {
+
+        // ROLLBACK IF ANY ERROR
+        mysqli_rollback($conn);
+
+        echo "Error creating RIS: " . $e->getMessage();
     }
-
-    //echo "RIS Created Successfully!";
 }
 
 ?>
