@@ -2,7 +2,23 @@
 
 include 'db.php';
 
+if(!isset($_GET['id'])){
+    die("No RIS ID provided.");
+}
+
 $ris_id = $_GET['id'];
+
+if(isset($_POST['status'])){
+
+    $status = $_POST['status'];
+    $id = $_GET['id'];
+
+    $update = "UPDATE ris SET status='$status' WHERE id='$id'";
+    mysqli_query($conn, $update);
+
+    header("Location: view-ris.php?id=$id");
+    exit();
+}
 
 $ris_query = "SELECT * FROM ris_requests
 WHERE id='$ris_id'";
@@ -23,6 +39,18 @@ WHERE ris_items.ris_id='$ris_id'";
 $item_result = mysqli_query($conn, $item_query);
 
 ?>
+
+<form method="POST">
+
+    <button type="submit" name="status" value="Approved">
+        Approve
+    </button>
+
+    <button type="submit" name="status" value="Issued">
+        Mark as Issued
+    </button>
+
+</form>
 
 <!DOCTYPE html>
 <html>
