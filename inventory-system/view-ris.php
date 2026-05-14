@@ -115,11 +115,21 @@ Department of Budget and Management ROIV-A
 <tr>
 
 <td>
-<?php echo $item['unit']; ?>
+    <?php
+    if(empty($item['product_id'])){
+        echo "-";
+    } else {
+        echo $item['unit'];}
+    ?>
 </td>
 
 <td>
-<?php echo $item['item_name']; ?>
+    <?php
+        if(empty($item['product_id'])){
+            echo $item['other_item'];
+    } else {
+        echo $item['item_name'];
+        }?>
 </td>
 
 <td class="center">
