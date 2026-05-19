@@ -2,6 +2,23 @@
 
 include 'db.php';
 
+session_start(); // 👈 ILALAGAY DITO
+
+// optional safety check
+if(!isset($user_id)){
+    header("Location: login.php");
+    exit();
+}
+
+$user_id = $_SESSION['user_id']; // 👈 DITO DIN AGAD
+
+$user_stmt = $conn->prepare("SELECT first_name, last_name FROM users WHERE id=?");
+$user_stmt->bind_param("i", $user_id);
+$user_stmt->execute();
+$user = $user_stmt->get_result()->fetch_assoc();
+
+$requested_by = $user['first_name'] . " " . $user['last_name'];
+
 $product_query = "SELECT * FROM products";
 $product_result = mysqli_query($conn, $product_query);
 
@@ -17,8 +34,32 @@ if(isset($_POST['submit'])){
         $ris_number = "RIS-" . date('YmdHis');
 
         // 1. INSERT RIS HEADER FIRST
-        $insert_ris = "INSERT INTO ris_requests (office, purpose, request_date, ris_number)
-        VALUES ('$office', '$purpose', '$request_date', '$ris_number')";
+        $status = "Pending";
+        $created_at = date('Y-m-d H:i:s');
+
+        $insert_ris = $conn->prepare("
+            INSERT INTO ris_requests 
+            (user_id, ris_number, office, purpose, requested_by, request_date, created_at, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+
+        $insert_ris->bind_param(
+            "isssssss",
+            $user_id,
+            $ris_number,
+            $office,
+            $purpose,
+            $requested_by,
+            $request_date,
+            $created_at,
+            $status
+        );
+
+        if(!$insert_ris->execute()){
+            throw new Exception("Failed to insert RIS header");
+        }
+
+        $ris_id = $insert_ris->insert_id;
 
         if(!mysqli_query($conn, $insert_ris)){
             throw new Exception("Failed to insert RIS header");}
@@ -43,6 +84,11 @@ if(isset($_POST['submit'])){
 
                 $product_sql = "SELECT current_balance FROM products WHERE id='$product_id'";
                 $product_result2 = mysqli_query($conn, $product_sql);
+
+                if(!$product_result2){
+                    throw new Exception("Product query failed");
+                }
+
                 $product = mysqli_fetch_assoc($product_result2);
 
                 if(!$product_result){
@@ -54,8 +100,21 @@ if(isset($_POST['submit'])){
                     $current_balance = $product['current_balance'];
 
                     if($current_balance >= $quantity_requested){
+
+                        // enough stock
                         $stock_available = "YES";
                         $quantity_issued = $quantity_requested;
+                        $quantity_to_purchase = 0;
+
+                    } else {
+
+                        // kulang or zero stock
+                        $stock_available = "NO";
+
+                        $quantity_issued = $current_balance;
+
+                        $quantity_to_purchase =
+                        $quantity_requested - $current_balance;
                     }
                 }
             }
@@ -67,7 +126,8 @@ if(isset($_POST['submit'])){
                 other_item,
                 quantity_requested,
                 quantity_issued,
-                stock_available
+                stock_available,
+                quantity_to_purchase
                 )
                 VALUES (
                 '$ris_id',
@@ -75,7 +135,8 @@ if(isset($_POST['submit'])){
                 '$other_item',
                 '$quantity_requested',
                 '$quantity_issued',
-                '$stock_available'
+                '$stock_available',
+                '$quantity_to_purchase'
                 )";
 
             if(!mysqli_query($conn, $insert_item)){
