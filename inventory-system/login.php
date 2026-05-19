@@ -63,15 +63,15 @@ if(isset($_POST['login'])){
             // ROLE-BASED REDIRECT
             if($user['role'] == 'admin'){
 
-                header("Location: products.php");
+                header("Location: ris-list.php");
 
             } elseif($user['role'] == 'supply_officer'){
 
-                header("Location: products.php");
+                header("Location: ris-list.php");
 
             } else {
 
-                header("Location: products.php");
+                header("Location: ris-list.php");
             }
 
             exit();
